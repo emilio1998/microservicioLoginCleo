@@ -17,9 +17,11 @@ import java.util.concurrent.TimeUnit;
 
 import com.cleotaginador.login.DTO.AuthRequest;
 import com.cleotaginador.login.DTO.AuthResponse;
+import com.cleotaginador.login.DTO.RefreshTokenResponse;
 import com.cleotaginador.login.Entity.UsuariosInfo;
 import com.cleotaginador.login.Service.JwtService;
 import com.cleotaginador.login.Service.RedisService;
+import com.cleotaginador.login.Service.RefreshTokenService;
 import com.cleotaginador.login.Service.UsuarioService;
 import com.cleotaginador.login.exception.GlobalLoginException;
 
@@ -31,13 +33,15 @@ public class AutenticacionController {
     private final JwtService jwtService;
     private final AuthenticationManager authenticationManager;
     private final RedisService redisService;
+    private final RefreshTokenService refreshTokenService;
 
     @Autowired
-    public AutenticacionController(@Qualifier("authenticationManager") AuthenticationManager authenticationManager, UsuarioService usuarioService, JwtService jwtService, RedisService redisService) {
+    public AutenticacionController(@Qualifier("authenticationManager") AuthenticationManager authenticationManager, UsuarioService usuarioService, JwtService jwtService, RedisService redisService, RefreshTokenService refreshTokenService) {
         this.authenticationManager = authenticationManager;
         this.usuarioService = usuarioService;
         this.jwtService = jwtService;
         this.redisService = redisService;
+        this.refreshTokenService = refreshTokenService;
     }
 
     @PostMapping("/new")
@@ -60,6 +64,9 @@ public class AutenticacionController {
                 AuthResponse authResponse = jwtService.generarToken(authR.getUsername());
                 UUID key = UUID.randomUUID();
                 redisService.guardarConExpiracion(key.toString(), authResponse.getJwt(), 30, TimeUnit.MINUTES);
+
+                RefreshTokenResponse refreshTokenResponse = refreshTokenService.generateRefreshToken(authR.getUsername());
+
                 return authResponse;
             } else {
                 throw new RuntimeException("Authentication failed");
