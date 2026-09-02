@@ -17,7 +17,7 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(GlobalLoginException.class)
     public ResponseEntity<ErrorResponse> handleCustomGlobalLoginException(GlobalLoginException ex) {
         ErrorResponse errorResponse = new ErrorResponse(ex.getCodigo(), ex.getMessage(), getErrorTimestamp());
-        return new ResponseEntity<>(errorResponse, HttpStatus.BAD_REQUEST);
+        return new ResponseEntity<>(errorResponse, HttpStatus.valueOf(ex.getCodigo()));
     }
 
     @ExceptionHandler(RuntimeException.class)

@@ -1,8 +1,13 @@
 package com.cleotaginador.login.Controllers;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.data.redis.core.Cursor;
+import org.springframework.data.redis.core.ScanOptions;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.BadCredentialsException;
@@ -16,7 +21,8 @@ import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
 import com.cleotaginador.login.DTO.AuthRequest;
-import com.cleotaginador.login.DTO.AuthResponse;
+import com.cleotaginador.login.DTO.JwtResponse;
+import com.cleotaginador.login.DTO.RefreshTokenRequest;
 import com.cleotaginador.login.DTO.RefreshTokenResponse;
 import com.cleotaginador.login.Entity.UsuariosInfo;
 import com.cleotaginador.login.Service.JwtService;
@@ -34,14 +40,16 @@ public class AutenticacionController {
     private final AuthenticationManager authenticationManager;
     private final RedisService redisService;
     private final RefreshTokenService refreshTokenService;
+    private final StringRedisTemplate redisTemplate;
 
     @Autowired
-    public AutenticacionController(@Qualifier("authenticationManager") AuthenticationManager authenticationManager, UsuarioService usuarioService, JwtService jwtService, RedisService redisService, RefreshTokenService refreshTokenService) {
+    public AutenticacionController(@Qualifier("authenticationManager") AuthenticationManager authenticationManager, UsuarioService usuarioService, JwtService jwtService, RedisService redisService, RefreshTokenService refreshTokenService, StringRedisTemplate redisTemplate) {
         this.authenticationManager = authenticationManager;
         this.usuarioService = usuarioService;
         this.jwtService = jwtService;
         this.redisService = redisService;
         this.refreshTokenService = refreshTokenService;
+        this.redisTemplate = redisTemplate;
     }
 
     @PostMapping("/new")
@@ -57,22 +65,76 @@ public class AutenticacionController {
     }
 
     @PostMapping("/autenticar")
-    public AuthResponse autenticar(@RequestBody AuthRequest authR) {
+    public JwtResponse autenticar(@RequestBody AuthRequest authR) {
         try {
+            eliminarTodosLosTokens(); // Elimina todos los tokens antiguos antes de devolver el nuevo
             Authentication authentication = authenticationManager.authenticate(new UsernamePasswordAuthenticationToken(authR.getUsername(), authR.getPassword()));
             if (authentication.isAuthenticated()) {
-                AuthResponse authResponse = jwtService.generarToken(authR.getUsername());
+                String authResponse = jwtService.generarToken(authR.getUsername());
                 UUID key = UUID.randomUUID();
-                redisService.guardarConExpiracion(key.toString(), authResponse.getJwt(), 30, TimeUnit.MINUTES);
+                redisService.guardarConExpiracion(key.toString() + ":accessToken", authResponse, 30, TimeUnit.MINUTES);
 
                 RefreshTokenResponse refreshTokenResponse = refreshTokenService.generateRefreshToken(authR.getUsername());
+                redisService.guardarConExpiracion(key.toString() + ":refreshToken", refreshTokenResponse.getToken(), 3, TimeUnit.DAYS);
 
-                return authResponse;
+                return JwtResponse.builder()
+                        .accessToken(key.toString())
+                        .refreshToken(refreshTokenResponse.getToken())
+                        .build();
             } else {
                 throw new RuntimeException("Authentication failed");
             }
         } catch (BadCredentialsException e) {
             throw new RuntimeException("Authentication failed", e);
+        }
+    }
+
+    @PostMapping("/refreshToken")
+    public JwtResponse refreshToken(@RequestBody RefreshTokenRequest refreshTokenRequest) {
+        try{
+            borrarPorPatron(refreshTokenRequest.getKeyTokenRedis() + ":accessToken");
+            Object storedRefreshToken = redisService.obtener(refreshTokenRequest.getKeyTokenRedis() + ":refreshToken");
+            String accessToken = jwtService.generarToken(storedRefreshToken.toString());
+            redisService.guardarConExpiracion(refreshTokenRequest.getKeyTokenRedis() + ":accessToken", accessToken, 30, TimeUnit.MINUTES);
+            JwtResponse jwtResponse = JwtResponse.builder()
+                    .accessToken(accessToken)
+                    .refreshToken(refreshTokenRequest.getKeyTokenRedis())
+                    .build();
+            return jwtResponse;
+        }
+        catch (Exception e){
+            throw new GlobalLoginException(401, "El token es inválido");
+        }
+    }
+
+
+    private void eliminarTodosLosTokens() {
+        borrarPorPatron("*:accessToken");
+        borrarPorPatron("*:refreshToken");
+    }
+
+    private void borrarPorPatron(String patron) {
+        ScanOptions options = ScanOptions.scanOptions().match(patron).count(100).build();
+        List<String> keysToDelete = new ArrayList<>();
+
+        try (Cursor<String> cursor = redisTemplate.scan(options)) {
+            
+            while (cursor.hasNext()) {
+                keysToDelete.add(cursor.next());
+                
+                // Borra en bloques de 100 para optimizar rendimiento
+                if (keysToDelete.size() >= 100) {
+                    redisTemplate.delete(keysToDelete);
+                    keysToDelete.clear();
+                }
+            }
+            
+            // Borra las claves sobrantes
+            if (!keysToDelete.isEmpty()) {
+                redisTemplate.delete(keysToDelete);
+            }
+        } catch (Exception e) {
+            throw new RuntimeException("Error deleting keys by pattern", e);
         }
     }
 }

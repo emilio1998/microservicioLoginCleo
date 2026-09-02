@@ -1,11 +1,13 @@
 package com.cleotaginador.login.Service;
 import com.cleotaginador.login.DTO.RefreshTokenResponse;
 import com.cleotaginador.login.Repository.IUsuarioInfoRepository;
-
+import java.util.UUID;
 import java.time.Instant;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
 
+@Service
 public class RefreshTokenService {
     private IUsuarioInfoRepository usuarioInfoRepository;
 
@@ -17,7 +19,7 @@ public class RefreshTokenService {
     public RefreshTokenResponse generateRefreshToken(String nickname) {
         RefreshTokenResponse refreshToken = RefreshTokenResponse.builder()
                 .usuario(usuarioInfoRepository.findByNickname(nickname).get())
-                .token("tokenId")
+                .token(UUID.randomUUID().toString())
                 .timestamp(Instant.now().plusMillis(600000))
                 .build();
         return refreshToken;
