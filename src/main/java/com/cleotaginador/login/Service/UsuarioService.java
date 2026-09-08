@@ -32,6 +32,11 @@ public class UsuarioService implements UserDetailsService {
         return usuarioInfoRepository.findByNickname(nickname).isPresent();
     }
 
+    public UsuariosInfo obtenerUsuarioPorNickname(String nickname) {
+        return usuarioInfoRepository.findByNickname(nickname)
+            .orElse(null);
+    }
+
     @Override
     public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
         UsuariosInfo user = usuarioInfoRepository.findByNickname(username)

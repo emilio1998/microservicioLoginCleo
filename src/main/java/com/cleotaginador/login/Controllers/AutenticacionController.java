@@ -1,5 +1,6 @@
 package com.cleotaginador.login.Controllers;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -14,6 +15,7 @@ import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.security.core.Authentication;
@@ -70,12 +72,27 @@ public class AutenticacionController {
             eliminarTodosLosTokens(); // Elimina todos los tokens antiguos antes de devolver el nuevo
             Authentication authentication = authenticationManager.authenticate(new UsernamePasswordAuthenticationToken(authR.getUsername(), authR.getPassword()));
             if (authentication.isAuthenticated()) {
-                String authResponse = jwtService.generarToken(authR.getUsername());
+                UsuariosInfo usuario = usuarioService.obtenerUsuarioPorNickname(authR.getUsername());
+
+                Map<String, Object> responseUser = new HashMap<>();
+
+                responseUser.put("id", usuario.getId());
+                responseUser.put("nickname", usuario.getNickname());
+                responseUser.put("roles", usuario.getRoles());
+
+                String authResponse = jwtService.generarToken(authR.getUsername(), responseUser);
                 UUID key = UUID.randomUUID();
-                redisService.guardarConExpiracion(key.toString() + ":accessToken", authResponse, 30, TimeUnit.MINUTES);
+
+                Map<String, Object> responseAccessToken = new HashMap<>();
+                responseAccessToken.put("accessToken", authResponse);
+                responseAccessToken.put("nickname", usuario.getNickname());
+                redisService.guardarConExpiracion(key.toString() + ":accessToken", responseAccessToken, 30, TimeUnit.MINUTES);
 
                 RefreshTokenResponse refreshTokenResponse = refreshTokenService.generateRefreshToken(authR.getUsername());
-                redisService.guardarConExpiracion(key.toString() + ":refreshToken", refreshTokenResponse.getToken(), 3, TimeUnit.DAYS);
+                Map<String, Object> responseRefreshToken = new HashMap<>();
+                responseRefreshToken.put("refreshToken", refreshTokenResponse.getToken());
+                responseRefreshToken.put("nickname", usuario.getNickname());
+                redisService.guardarConExpiracion(key.toString() + ":refreshToken", responseRefreshToken, 1, TimeUnit.DAYS);
 
                 return JwtResponse.builder()
                         .accessToken(key.toString())
@@ -90,15 +107,33 @@ public class AutenticacionController {
     }
 
     @PostMapping("/refreshToken")
-    public JwtResponse refreshToken(@RequestBody RefreshTokenRequest refreshTokenRequest) {
+    public JwtResponse refreshToken(@RequestBody RefreshTokenRequest refreshTokenRequest, @RequestHeader("RefreshToken") String refreshToken) {
         try{
             borrarPorPatron(refreshTokenRequest.getKeyTokenRedis() + ":accessToken");
-            Object storedRefreshToken = redisService.obtener(refreshTokenRequest.getKeyTokenRedis() + ":refreshToken");
-            String accessToken = jwtService.generarToken(storedRefreshToken.toString());
-            redisService.guardarConExpiracion(refreshTokenRequest.getKeyTokenRedis() + ":accessToken", accessToken, 30, TimeUnit.MINUTES);
+
+            @SuppressWarnings("unchecked")
+            Map<String, Object> storedRefreshToken = (Map<String, Object>) redisService.obtener(refreshTokenRequest.getKeyTokenRedis() + ":refreshToken");
+
+            if (storedRefreshToken == null || !storedRefreshToken.get("refreshToken").toString().equals(refreshToken)) {
+                throw new GlobalLoginException(401, "El token es inválido");
+            }
+            
+            UsuariosInfo usuario = usuarioService.obtenerUsuarioPorNickname(storedRefreshToken.get("nickname").toString());
+            Map<String, Object> responseUser = new HashMap<>();
+            responseUser.put("id", usuario.getId());
+            responseUser.put("nickname", usuario.getNickname());
+            responseUser.put("roles", usuario.getRoles());
+
+
+            String accessToken = jwtService.generarToken(storedRefreshToken.get("nickname").toString(), responseUser);
+
+            Map<String, Object> responseAccessToken = new HashMap<>();
+            responseAccessToken.put("accessToken", accessToken);
+            responseAccessToken.put("nickname", storedRefreshToken.get("nickname").toString());
+            redisService.guardarConExpiracion(refreshTokenRequest.getKeyTokenRedis() + ":accessToken", responseAccessToken, 30, TimeUnit.MINUTES);
             JwtResponse jwtResponse = JwtResponse.builder()
                     .accessToken(accessToken)
-                    .refreshToken(refreshTokenRequest.getKeyTokenRedis())
+                    .refreshToken(refreshToken)
                     .build();
             return jwtResponse;
         }
