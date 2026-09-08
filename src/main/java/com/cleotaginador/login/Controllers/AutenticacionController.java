@@ -23,6 +23,7 @@ import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
 import com.cleotaginador.login.DTO.AuthRequest;
+import com.cleotaginador.login.DTO.EntityResponse;
 import com.cleotaginador.login.DTO.JwtResponse;
 import com.cleotaginador.login.DTO.RefreshTokenRequest;
 import com.cleotaginador.login.DTO.RefreshTokenResponse;
@@ -67,7 +68,16 @@ public class AutenticacionController {
     }
 
     @PostMapping("/autenticar")
-    public JwtResponse autenticar(@RequestBody AuthRequest authR) {
+    public ResponseEntity<EntityResponse> autenticar(@RequestBody AuthRequest authR) {
+        Map<String, Object> responseMap = new HashMap<>();
+        if (authR.getUsername() == null || 
+            authR.getUsername().isEmpty() ||
+            authR.getPassword() == null ||
+            authR.getPassword().isEmpty()) {
+                return ResponseEntity.badRequest().body(
+                    new EntityResponse("Username and password must be provided", 400)
+                );
+        }
         try {
             eliminarTodosLosTokens(); // Elimina todos los tokens antiguos antes de devolver el nuevo
             Authentication authentication = authenticationManager.authenticate(new UsernamePasswordAuthenticationToken(authR.getUsername(), authR.getPassword()));
@@ -94,15 +104,19 @@ public class AutenticacionController {
                 responseRefreshToken.put("nickname", usuario.getNickname());
                 redisService.guardarConExpiracion(key.toString() + ":refreshToken", responseRefreshToken, 1, TimeUnit.DAYS);
 
-                return JwtResponse.builder()
+                JwtResponse jwtResponse = JwtResponse.builder()
                         .accessToken(key.toString())
                         .refreshToken(refreshTokenResponse.getToken())
                         .build();
+
+                return ResponseEntity.ok(new EntityResponse(jwtResponse, 200));
             } else {
-                throw new RuntimeException("Authentication failed");
+                return ResponseEntity.status(401).body(new EntityResponse("Credenciales inválidas", 401));
             }
         } catch (BadCredentialsException e) {
-            throw new RuntimeException("Authentication failed", e);
+            return ResponseEntity.status(401).body(new EntityResponse("Credenciales inválidas", 401));
+        } catch (Exception e) {
+            return ResponseEntity.status(500).body(new EntityResponse("Ocurrió un error en la autenticación", 500));
         }
     }
 
