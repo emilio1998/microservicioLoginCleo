@@ -24,6 +24,9 @@ public class UsuarioService implements UserDetailsService {
 
     public String agregarUsuario(UsuariosInfo usuarioInfo) {
         usuarioInfo.setPassword(passwordEncoder.encode(usuarioInfo.getPassword()));
+        if (usuarioInfo.getDatosUsuarios() != null) {
+            usuarioInfo.getDatosUsuarios().setUsuariosInfo(usuarioInfo);
+        }
         usuarioInfoRepository.save(usuarioInfo);
         return "Usuario agregado correctamente";
     }
@@ -33,7 +36,7 @@ public class UsuarioService implements UserDetailsService {
     }
 
     public UsuariosInfo obtenerUsuarioPorNickname(String nickname) {
-        return usuarioInfoRepository.findByNickname(nickname)
+        return usuarioInfoRepository.findByNicknameConDatos(nickname)
             .orElse(null);
     }
 

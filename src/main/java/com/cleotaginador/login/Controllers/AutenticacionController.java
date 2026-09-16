@@ -1,4 +1,6 @@
 package com.cleotaginador.login.Controllers;
+import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -90,6 +92,13 @@ public class AutenticacionController {
                 responseUser.put("id", usuario.getId());
                 responseUser.put("nickname", usuario.getNickname());
                 responseUser.put("roles", usuario.getRoles());
+                if (usuario.getDatosUsuarios() != null) {
+                    responseUser.put("nombre1", usuario.getDatosUsuarios().getNombre1());
+                    responseUser.put("nombre2", usuario.getDatosUsuarios().getNombre2());
+                    responseUser.put("apellido1", usuario.getDatosUsuarios().getApellido1());
+                    responseUser.put("apellido2", usuario.getDatosUsuarios().getApellido2());
+                    responseUser.put("fechaNacimiento", convertirFechaString(usuario.getDatosUsuarios().getFechaNacimiento()));
+                }
 
                 String authResponse = jwtService.generarToken(authR.getUsername(), responseUser);
                 UUID key = UUID.randomUUID();
@@ -193,5 +202,13 @@ public class AutenticacionController {
         } catch (Exception e) {
             throw new RuntimeException("Error deleting keys by pattern", e);
         }
+    }
+
+    private String convertirFechaString(LocalDate fecha) {
+        if (fecha == null) {
+            return null;
+        }
+        DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd");
+        return fecha.format(formatter);
     }
 }
