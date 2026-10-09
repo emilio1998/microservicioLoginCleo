@@ -6,6 +6,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.data.redis.core.Cursor;
@@ -24,6 +25,7 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.security.core.Authentication;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
+import java.util.logging.Logger;
 
 import com.cleotaginador.login.DTO.AuthRequest;
 import com.cleotaginador.login.DTO.EntityResponse;
@@ -47,6 +49,8 @@ public class AutenticacionController {
     private final RedisService redisService;
     private final RefreshTokenService refreshTokenService;
     private final StringRedisTemplate redisTemplate;
+
+    Logger log = Logger.getLogger(AutenticacionController.class.getName());
 
     @Autowired
     public AutenticacionController(@Qualifier("authenticationManager") AuthenticationManager authenticationManager, UsuarioService usuarioService, JwtService jwtService, RedisService redisService, RefreshTokenService refreshTokenService, StringRedisTemplate redisTemplate) {
@@ -126,6 +130,7 @@ public class AutenticacionController {
         } catch (BadCredentialsException e) {
             return ResponseEntity.status(401).body(new EntityResponse("Credenciales inválidas", 401));
         } catch (Exception e) {
+            log.severe("Error en la autenticación: " + e.getMessage());
             return ResponseEntity.status(500).body(new EntityResponse("Ocurrió un error en la autenticación", 500));
         }
     }
