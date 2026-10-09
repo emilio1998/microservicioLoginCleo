@@ -131,7 +131,7 @@ public class AutenticacionController {
             return ResponseEntity.status(401).body(new EntityResponse("Credenciales inválidas", 401));
         } catch (Exception e) {
             log.severe("Error en la autenticación: " + e.getMessage());
-            return ResponseEntity.status(500).body(new EntityResponse("Ocurrió un error en la autenticación", 500));
+            return ResponseEntity.status(500).body(new EntityResponse("Ocurrió un error en la autenticación: " + e.getMessage(), 500));
         }
     }
 
